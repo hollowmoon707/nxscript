@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from pathlib import Path
@@ -12,6 +13,31 @@ from pathlib import Path
 from .errors import ScriptError
 
 _WORKER = Path(__file__).with_name("_py27_worker.py")
+
+
+def _start_worker(command: list[str]) -> subprocess.Popen:
+    options = {"stdin": subprocess.PIPE, "stdout": subprocess.PIPE, "stderr": subprocess.DEVNULL}
+    if not getattr(sys, "frozen", False):
+        return subprocess.Popen(command, **options)
+    if os.name == "nt":
+        # PyInstaller points the DLL loader at its Python 3 libraries.
+        import ctypes
+
+        set_directory = ctypes.windll.kernel32.SetDllDirectoryW
+        set_directory.argtypes = [ctypes.c_wchar_p]
+        set_directory(None)
+        try:
+            return subprocess.Popen(command, **options)
+        finally:
+            set_directory(sys._MEIPASS)
+
+    env = os.environ.copy()
+    original = env.pop("LD_LIBRARY_PATH_ORIG", None)
+    if original is None:
+        env.pop("LD_LIBRARY_PATH", None)
+    else:
+        env["LD_LIBRARY_PATH"] = original
+    return subprocess.Popen(command, env=env, **options)
 
 
 class PythonRuntime:
@@ -62,10 +88,7 @@ class PythonRuntime:
             if not executable or executable in attempted:
                 continue
             try:
-                self.process = subprocess.Popen(
-                    [executable, *worker_args],
-                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                )
+                self.process = _start_worker([executable, *worker_args])
                 self._exchange(None, timeout=15)
             except (OSError, ScriptError) as exc:
                 attempted[executable] = str(exc)

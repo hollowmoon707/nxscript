@@ -65,3 +65,8 @@ returns exit status 1.
 See [usage and file layout](docs/usage.md) for the individual commands and
 [design and format](docs/design.md) for relocation, runtime discovery, and
 opcode table regeneration.
+
+## Release downloads
+
+The release workflow builds bundled and unbundled archives for Windows x64 and
+Ubuntu x64. See [release installation and build instructions](docs/releases.md).
